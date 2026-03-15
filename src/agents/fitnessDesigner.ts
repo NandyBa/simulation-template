@@ -24,15 +24,24 @@ function extractFunctionBody(raw: string): string {
   return body;
 }
 
+export interface FitnessDesignerResult {
+  fn: FitnessFunction;
+  body: string;
+}
+
 /**
  * Translates a plain-English fitness goal into a sandboxed FitnessFunction.
+ * Returns both the function and the extracted body for display.
  */
 export async function fitnessDesignerAgent(
   goal: string
-): Promise<FitnessFunction> {
+): Promise<FitnessDesignerResult> {
   return callSubAgent(
     SYSTEM_PROMPT,
     goal,
-    (raw) => sandboxFitnessFunction(extractFunctionBody(raw))
+    (raw) => {
+      const body = extractFunctionBody(raw);
+      return { fn: sandboxFitnessFunction(body), body };
+    }
   );
 }

@@ -23,17 +23,21 @@ const mockOrg: Organism = {
 afterEach(() => jest.clearAllMocks());
 
 describe("fitnessDesignerAgent", () => {
-  it("returns a callable FitnessFunction from a valid response", async () => {
-    mockCallSubAgent.mockResolvedValueOnce(
-      sandboxFitnessFunction("return organism.energy * 2;")
+  it("returns a FitnessDesignerResult with fn and body", async () => {
+    mockCallSubAgent.mockImplementationOnce(async (_s, _u, parse) =>
+      parse("return organism.energy * 2;")
     );
-    const fn = await fitnessDesignerAgent("reward high energy");
-    expect(typeof fn).toBe("function");
-    expect(fn(mockOrg, {} as never)).toBe(100);
+    const result = await fitnessDesignerAgent("reward high energy");
+    expect(typeof result.fn).toBe("function");
+    expect(result.fn(mockOrg, {} as never)).toBe(100);
+    expect(typeof result.body).toBe("string");
+    expect(result.body.length).toBeGreaterThan(0);
   });
 
   it("passes the user goal as the user message", async () => {
-    mockCallSubAgent.mockResolvedValueOnce(() => 0);
+    mockCallSubAgent.mockImplementationOnce(async (_s, _u, parse) =>
+      parse("return 0;")
+    );
     await fitnessDesignerAgent("survive as long as possible");
     expect(mockCallSubAgent).toHaveBeenCalledWith(
       expect.any(String),
@@ -45,6 +49,16 @@ describe("fitnessDesignerAgent", () => {
   it("propagates errors from callSubAgent", async () => {
     mockCallSubAgent.mockRejectedValueOnce(new Error("Ollama unavailable"));
     await expect(fitnessDesignerAgent("anything")).rejects.toThrow("Ollama unavailable");
+  });
+
+  it("generated function returns finite non-negative value for valid body", async () => {
+    mockCallSubAgent.mockImplementationOnce(async (_s, _u, parse) =>
+      parse("return organism.age + organism.energy;")
+    );
+    const { fn } = await fitnessDesignerAgent("reward age and energy");
+    const score = fn(mockOrg, {} as never);
+    expect(Number.isFinite(score)).toBe(true);
+    expect(score).toBeGreaterThanOrEqual(0);
   });
 });
 

@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { fitnessDesignerAgent } from "../agents/fitnessDesigner";
+import type { FitnessDesignerResult } from "../agents/fitnessDesigner";
 import { mutationAdvisorAgent } from "../agents/mutationAdvisor";
 import type { PopulationStats, AdvisorAdvice } from "../agents/mutationAdvisor";
 import { narratorAgent } from "../agents/narrator";
@@ -40,8 +41,9 @@ function buildStats(world: WorldState): PopulationStats {
 
 export function AgentPanels({ world, onFitnessChange, onConfigChange }: Props) {
   const [fitnessGoal, setFitnessGoal] = useState("");
-  const [fitnessStatus, setFitnessStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  const [fitnessStatus, setFitnessStatus] = useState<"idle" | "loading" | "ready" | "applied" | "error">("idle");
   const [fitnessError, setFitnessError] = useState<string | null>(null);
+  const [pendingResult, setPendingResult] = useState<FitnessDesignerResult | null>(null);
 
   const [advisorStatus, setAdvisorStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [advice, setAdvice] = useState<AdvisorAdvice | null>(null);
@@ -55,14 +57,21 @@ export function AgentPanels({ world, onFitnessChange, onConfigChange }: Props) {
     if (!fitnessGoal.trim()) return;
     setFitnessStatus("loading");
     setFitnessError(null);
+    setPendingResult(null);
     try {
-      const fn = await fitnessDesignerAgent(fitnessGoal);
-      onFitnessChange(fn);
-      setFitnessStatus("ok");
+      const result: FitnessDesignerResult = await fitnessDesignerAgent(fitnessGoal);
+      setPendingResult(result);
+      setFitnessStatus("ready");
     } catch (e) {
       setFitnessStatus("error");
       setFitnessError(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  function handleApplyFitness() {
+    if (!pendingResult) return;
+    onFitnessChange(pendingResult.fn);
+    setFitnessStatus("applied");
   }
 
   async function handleAdvise() {
@@ -94,6 +103,7 @@ export function AgentPanels({ world, onFitnessChange, onConfigChange }: Props) {
   }
 
   const anyLoading = fitnessStatus === "loading" || advisorStatus === "loading" || narratorStatus === "loading";
+  const fitnessBody = pendingResult?.body ?? null;
 
   return (
     <div style={{ borderTop: "1px solid #333", paddingTop: 12, marginTop: 12 }}>
@@ -110,13 +120,33 @@ export function AgentPanels({ world, onFitnessChange, onConfigChange }: Props) {
           style={{ width: "100%", fontSize: "0.75rem", boxSizing: "border-box", background: "#222", color: "#eee", border: "1px solid #444" }}
         />
         <button onClick={handleDesignFitness} disabled={anyLoading || !fitnessGoal.trim()} style={{ marginTop: 4, fontSize: "0.75rem" }}>
-          {fitnessStatus === "loading" ? "Generating…" : "Generate"}
+          {fitnessStatus === "loading" ? "Generating…" : (fitnessStatus === "ready" || fitnessStatus === "applied") ? "Re-generate" : "Generate"}
         </button>
-        {fitnessStatus === "ok" && <p style={{ fontSize: "0.7rem", color: "#4ade80", margin: "4px 0 0" }}>✓ Fitness applied</p>}
+        {(fitnessStatus === "ready" || fitnessStatus === "applied") && fitnessBody && (
+          <div style={{ marginTop: 6 }}>
+            {fitnessStatus === "ready" && (
+              <p style={{ fontSize: "0.7rem", color: "#fbbf24", margin: "0 0 4px" }}>⚠ Generated — not yet active. Review then apply:</p>
+            )}
+            {fitnessStatus === "applied" && (
+              <p style={{ fontSize: "0.7rem", color: "#4ade80", margin: "0 0 4px" }}>✓ Active fitness function:</p>
+            )}
+            <pre style={{ fontSize: "0.65rem", background: "#1a1a1a", border: "1px solid #333", borderRadius: 4, padding: "6px 8px", margin: 0, overflowX: "auto", color: "#c084fc", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              {fitnessBody}
+            </pre>
+            {fitnessStatus === "ready" && (
+              <button
+                onClick={handleApplyFitness}
+                style={{ marginTop: 6, fontSize: "0.75rem", background: "#16a34a", color: "#fff", border: "none", borderRadius: 3, padding: "3px 10px", cursor: "pointer" }}
+              >
+                Apply to simulation
+              </button>
+            )}
+          </div>
+        )}
         {fitnessError && <p style={{ fontSize: "0.7rem", color: "#f87171", margin: "4px 0 0" }}>{fitnessError}</p>}
         <button
-          onClick={() => { onFitnessChange(survivalFitness); setFitnessStatus("idle"); setFitnessGoal(""); }}
-          style={{ fontSize: "0.7rem", marginTop: 4, opacity: 0.6 }}
+          onClick={() => { onFitnessChange(survivalFitness); setFitnessStatus("idle"); setFitnessGoal(""); setPendingResult(null); }}
+          style={{ fontSize: "0.7rem", marginTop: 6, opacity: 0.6 }}
         >
           Reset to default
         </button>

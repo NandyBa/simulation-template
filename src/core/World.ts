@@ -78,9 +78,17 @@ export function tick(
   });
 
   // ── Phase 3: Evaluate fitness ─────────────────────────────────────────────
-  const fitnesses = organisms.map((o) =>
-    o.alive ? fitnessfn(o, { ...world, organisms }) : 0
-  );
+  // Wrap in try-catch: a bad generated fitness fn should not crash the tick
+  const partialWorld = { ...world, organisms };
+  const fitnesses = organisms.map((o) => {
+    if (!o.alive) return 0;
+    try {
+      const score = fitnessfn(o, partialWorld);
+      return Number.isFinite(score) ? Math.max(0, score) : 0;
+    } catch {
+      return survivalFitness(o, partialWorld);
+    }
+  });
 
   // ── Phase 4: Reproduce ────────────────────────────────────────────────────
   const alive = organisms.filter((o) => o.alive);
@@ -92,9 +100,17 @@ export function tick(
   ) {
     const eligible = alive.filter((o) => o.energy >= config.reproductionThreshold);
     if (eligible.length >= 2) {
+      const selWorld = { ...world, organisms };
       const parents = select(
         eligible,
-        eligible.map((o) => fitnessfn(o, { ...world, organisms })),
+        eligible.map((o) => {
+          try {
+            const s = fitnessfn(o, selWorld);
+            return Number.isFinite(s) ? Math.max(0, s) : 0;
+          } catch {
+            return survivalFitness(o, selWorld);
+          }
+        }),
         config.selectionType,
         2,
         config.tournamentSize,
