@@ -67,6 +67,12 @@ export type SelectionType = "tournament" | "roulette" | "rank" | "elitism";
 
 export type FitnessFunction = (organism: Organism, world: WorldState) => number;
 
+/**
+ * Optional movement override for tick().
+ * Returns an ordered list of [dx, dy] candidates to try — first unoccupied wins.
+ */
+export type MoveFn = (organism: Organism, tick: number) => [number, number][];
+
 // ─── Operators ────────────────────────────────────────────────────────────────
 
 export interface SelectionResult {

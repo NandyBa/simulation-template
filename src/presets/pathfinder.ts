@@ -1,18 +1,38 @@
 import { createConfig } from "../core/World";
-import type { FitnessFunction, SimConfig } from "../core/types";
+import type { FitnessFunction, MoveFn, SimConfig } from "../core/types";
+
+const DIRS: Record<string, [number, number]> = {
+  N: [0, -1],
+  S: [0, 1],
+  E: [1, 0],
+  W: [-1, 0],
+};
+const FALLBACK: [number, number][] = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 
 /**
- * Organisms evolve to navigate a maze from start to goal.
- * Fitness rewards proximity to the goal position.
+ * Genome-driven movement: genome[tick % genomeLength] picks the preferred
+ * direction. Returns the preferred direction first, then the rest as fallbacks
+ * so the organism always moves if any adjacent cell is free.
+ */
+export const pathfinderMoveFn: MoveFn = (organism, tick) => {
+  const gene = organism.genome[tick % organism.genome.length];
+  const preferred = typeof gene === "string" ? (DIRS[gene] ?? FALLBACK[0]) : FALLBACK[0];
+  const others = FALLBACK.filter(([dx, dy]) => dx !== preferred[0] || dy !== preferred[1]);
+  return [preferred, ...others];
+};
+
+/**
+ * Rewards proximity to the goal (bottom-right corner).
+ * Max score when the organism is at the goal; 0 when at max Manhattan distance.
  */
 export const pathfinderFitness: FitnessFunction = (organism, world) => {
-  // TODO: calculate Manhattan distance to goal, reward minimisation
+  if (!organism.alive) return 0;
   const goalX = world.config.width - 1;
   const goalY = world.config.height - 1;
   const [x, y] = organism.position;
   const distance = Math.abs(goalX - x) + Math.abs(goalY - y);
-  const maxDist = world.config.width + world.config.height;
-  return organism.alive ? Math.max(0, maxDist - distance) : 0;
+  const maxDist = world.config.width + world.config.height - 2;
+  return Math.max(0, maxDist - distance) + organism.age * 0.05;
 };
 
 export const pathfinderConfig: SimConfig = createConfig({

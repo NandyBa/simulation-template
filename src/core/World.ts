@@ -2,7 +2,7 @@ import { createOrganismFromGenome, createOrganism } from "./Organism";
 import { crossover, mutate, select } from "./Operators";
 import { survivalFitness } from "./Fitness";
 import { createRNG, randInt } from "./RNG";
-import type { Cell, FitnessFunction, Organism, SimConfig, WorldState } from "./types";
+import type { Cell, FitnessFunction, MoveFn, Organism, SimConfig, WorldState } from "./types";
 
 /** Creates an initial world state from a config */
 export function createWorld(config: SimConfig): WorldState {
@@ -41,7 +41,8 @@ export function createWorld(config: SimConfig): WorldState {
  */
 export function tick(
   world: WorldState,
-  fitnessfn: FitnessFunction = survivalFitness
+  fitnessfn: FitnessFunction = survivalFitness,
+  moveFn?: MoveFn
 ): WorldState {
   const rng = createRNG(world.rngState);
   const { config } = world;
@@ -61,10 +62,10 @@ export function tick(
   organisms = organisms.map((org) => {
     if (!org.alive) return org;
     const [x, y] = org.position;
-    const dirs: [number, number][] = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-    // Shuffle directions for fairness
-    const shuffled = dirs.slice().sort(() => rng() - 0.5);
-    for (const [dx, dy] of shuffled) {
+    const dirs: [number, number][] = moveFn
+      ? moveFn(org, world.tick)
+      : ([[0, 1], [0, -1], [1, 0], [-1, 0]] as [number, number][]).slice().sort(() => rng() - 0.5);
+    for (const [dx, dy] of dirs) {
       const nx = (x + dx + config.width) % config.width;
       const ny = (y + dy + config.height) % config.height;
       const key = `${nx},${ny}`;
