@@ -1,8 +1,8 @@
 import { survivalFitness } from "../core/Fitness";
 import { defaultConfig } from "../core/World";
-import type { FitnessFunction, MoveFn, SimConfig } from "../core/types";
+import type { FitnessFunction, MoveFn, SimConfig, WorldState } from "../core/types";
 import { ecosystemConfig, ecosystemFitness } from "./ecosystem";
-import { gameOfLifeConfig, gameOfLifeFitness } from "./gameOfLife";
+import { gameOfLifeConfig, gameOfLifeFitness, gameOfLifeTick } from "./gameOfLife";
 import { pathfinderConfig, pathfinderFitness, pathfinderMoveFn } from "./pathfinder";
 
 export interface Preset {
@@ -12,6 +12,8 @@ export interface Preset {
   config: SimConfig;
   fitnessFn: FitnessFunction;
   moveFn?: MoveFn;
+  /** Replaces the entire tick loop (e.g. cellular automata that don't use GA mechanics) */
+  tickFn?: (world: WorldState) => WorldState;
 }
 
 export const PRESETS: Preset[] = [
@@ -25,9 +27,10 @@ export const PRESETS: Preset[] = [
   {
     id: "game-of-life",
     name: "Game of Life",
-    description: "Genome encodes survival rules; clusters emerge via selection",
+    description: "Real Conway's GoL — cells survive with 2–3 neighbours, born with exactly 3",
     config: gameOfLifeConfig,
     fitnessFn: gameOfLifeFitness,
+    tickFn: gameOfLifeTick,
   },
   {
     id: "pathfinder",

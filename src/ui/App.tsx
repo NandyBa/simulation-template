@@ -8,6 +8,7 @@ import { useStatsHistory } from "./useStatsHistory";
 import { createWorld, tick, createConfig, defaultConfig } from "../core/World";
 import { survivalFitness } from "../core/Fitness";
 import type { FitnessFunction, MoveFn, Organism, SimConfig, WorldState } from "../core/types";
+import type { Preset } from "../presets/index";
 import { PRESETS } from "../presets/index";
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
   const rafRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fitnessFnRef = useRef<FitnessFunction>(survivalFitness);
   const moveFnRef = useRef<MoveFn | undefined>(undefined);
+  const tickFnRef = useRef<Preset["tickFn"]>(undefined);
   const { history, reset: resetHistory } = useStatsHistory(world);
 
   useEffect(() => { fitnessFnRef.current = fitnessFn; }, [fitnessFn]);
@@ -37,21 +39,29 @@ export default function App() {
     setSelected(null);
   }
 
-  const step = useCallback(() => {
-    setWorld((w) => { try { return tick(w, fitnessFnRef.current, moveFnRef.current); } catch { return w; } });
+  const doTick = useCallback((w: WorldState) => {
+    try {
+      return tickFnRef.current
+        ? tickFnRef.current(w)
+        : tick(w, fitnessFnRef.current, moveFnRef.current);
+    } catch { return w; }
   }, []);
+
+  const step = useCallback(() => {
+    setWorld((w) => doTick(w));
+  }, [doTick]);
 
   useEffect(() => {
     if (!running) { if (rafRef.current) clearTimeout(rafRef.current); return; }
     const schedule = () => {
       rafRef.current = setTimeout(() => {
-        setWorld((w) => { try { return tick(w, fitnessFnRef.current, moveFnRef.current); } catch { return w; } });
+        setWorld((w) => doTick(w));
         schedule();
       }, speed);
     };
     schedule();
     return () => { if (rafRef.current) clearTimeout(rafRef.current); };
-  }, [running, speed]);
+  }, [running, speed, doTick]);
 
   useEffect(() => {
     if (!selected) return;
@@ -65,6 +75,7 @@ export default function App() {
     setFitnessFn(() => preset.fitnessFn);
     fitnessFnRef.current = preset.fitnessFn;
     moveFnRef.current = preset.moveFn;
+    tickFnRef.current = preset.tickFn;
     setWorld(createWorld(preset.config));
     resetHistory();
     setSelected(null);
