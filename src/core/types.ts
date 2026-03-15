@@ -54,7 +54,8 @@ export interface SimConfig {
   elitismCount: number;
   tournamentSize: number;
   genomeSchema: GenomeSchema;
-  energyPerTick: number;
+  energyPerTick: number;        // energy drained per tick
+  energyGainPerTick: number;    // passive energy regen per tick
   reproductionThreshold: number;
   seed: number;
 }

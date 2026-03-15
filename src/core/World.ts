@@ -1,6 +1,8 @@
-import { createOrganism } from "./Organism";
-import { createRNG } from "./RNG";
-import type { Cell, SimConfig, WorldState } from "./types";
+import { createOrganismFromGenome, createOrganism } from "./Organism";
+import { crossover, mutate, select } from "./Operators";
+import { survivalFitness } from "./Fitness";
+import { createRNG, randInt } from "./RNG";
+import type { Cell, FitnessFunction, Organism, SimConfig, WorldState } from "./types";
 
 /** Creates an initial world state from a config */
 export function createWorld(config: SimConfig): WorldState {
@@ -9,7 +11,7 @@ export function createWorld(config: SimConfig): WorldState {
     Array(config.width).fill(null)
   );
 
-  const organisms = Array.from({ length: config.populationSize }, (_, i) => {
+  const organisms = Array.from({ length: config.populationSize }, () => {
     const x = Math.floor(rng() * config.width);
     const y = Math.floor(rng() * config.height);
     return createOrganism(config.genomeSchema, [x, y], Math.floor(rng() * 2 ** 32));
@@ -37,33 +39,139 @@ export function createWorld(config: SimConfig): WorldState {
  *
  * Tick phases: Sense → Decide → Act → Evaluate → Reproduce → Cull
  */
-export function tick(world: WorldState): WorldState {
-  // TODO: implement full tick phases in Phase 1.5
-  // For now: age all organisms, drain energy, mark dead
-  const organisms = world.organisms.map((org) => ({
-    ...org,
-    age: org.age + 1,
-    energy: org.energy - world.config.energyPerTick,
-    alive: org.energy - world.config.energyPerTick > 0,
-  }));
+export function tick(
+  world: WorldState,
+  fitnessfn: FitnessFunction = survivalFitness
+): WorldState {
+  const rng = createRNG(world.rngState);
+  const { config } = world;
 
-  const newGrid: Cell[][] = Array.from({ length: world.config.height }, () =>
-    Array(world.config.width).fill(null)
+  // ── Phase 1: Age + energy drain + passive regen ──────────────────────────
+  let organisms: Organism[] = world.organisms.map((org) => {
+    const energy = org.energy + config.energyGainPerTick - config.energyPerTick;
+    return { ...org, age: org.age + 1, energy, alive: energy > 0 };
+  });
+
+  // ── Phase 2: Move (Act) — each organism steps toward a random neighbour ──
+  // Build an occupancy set to avoid collisions
+  const occupied = new Set<string>(
+    organisms.filter((o) => o.alive).map((o) => `${o.position[0]},${o.position[1]}`)
   );
-  for (const org of organisms) {
+
+  organisms = organisms.map((org) => {
+    if (!org.alive) return org;
+    const [x, y] = org.position;
+    const dirs: [number, number][] = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+    // Shuffle directions for fairness
+    const shuffled = dirs.slice().sort(() => rng() - 0.5);
+    for (const [dx, dy] of shuffled) {
+      const nx = (x + dx + config.width) % config.width;
+      const ny = (y + dy + config.height) % config.height;
+      const key = `${nx},${ny}`;
+      if (!occupied.has(key)) {
+        occupied.delete(`${x},${y}`);
+        occupied.add(key);
+        return { ...org, position: [nx, ny] as [number, number] };
+      }
+    }
+    return org;
+  });
+
+  // ── Phase 3: Evaluate fitness ─────────────────────────────────────────────
+  const fitnesses = organisms.map((o) =>
+    o.alive ? fitnessfn(o, { ...world, organisms }) : 0
+  );
+
+  // ── Phase 4: Reproduce ────────────────────────────────────────────────────
+  const alive = organisms.filter((o) => o.alive);
+  const newborns: Organism[] = [];
+
+  if (
+    alive.length >= 2 &&
+    alive.length < config.carryingCapacity
+  ) {
+    const eligible = alive.filter((o) => o.energy >= config.reproductionThreshold);
+    if (eligible.length >= 2) {
+      const parents = select(
+        eligible,
+        eligible.map((o) => fitnessfn(o, { ...world, organisms })),
+        config.selectionType,
+        2,
+        config.tournamentSize,
+        Math.floor(rng() * 2 ** 32)
+      );
+      const [p1, p2] = parents;
+      const seed = Math.floor(rng() * 2 ** 32);
+
+      if (rng() < config.crossoverRate) {
+        const [g1, g2] = crossover(p1.genome, p2.genome, config.crossoverType, seed);
+        const mg1 = mutate(g1, config.genomeSchema, "gaussian", config.mutationRate, seed);
+        const mg2 = mutate(g2, config.genomeSchema, "gaussian", config.mutationRate, seed + 1);
+
+        const birthX = randInt(rng, 0, config.width - 1);
+        const birthY = randInt(rng, 0, config.height - 1);
+        const birthKey = `${birthX},${birthY}`;
+
+        if (!occupied.has(birthKey) && organisms.length + newborns.length < config.carryingCapacity) {
+          newborns.push(createOrganismFromGenome(mg1, config.genomeSchema, [birthX, birthY]));
+          occupied.add(birthKey);
+        }
+
+        const b2x = randInt(rng, 0, config.width - 1);
+        const b2y = randInt(rng, 0, config.height - 1);
+        const b2key = `${b2x},${b2y}`;
+        if (!occupied.has(b2key) && organisms.length + newborns.length < config.carryingCapacity) {
+          newborns.push(createOrganismFromGenome(mg2, config.genomeSchema, [b2x, b2y]));
+        }
+      }
+    }
+  }
+
+  // ── Phase 5: Cull — enforce carrying capacity ─────────────────────────────
+  let nextOrganisms = [...organisms, ...newborns];
+
+  if (nextOrganisms.filter((o) => o.alive).length > config.carryingCapacity) {
+    // Remove lowest-fitness alive organisms until within cap
+    const sorted = nextOrganisms
+      .map((o, i) => ({ o, f: o.alive ? (fitnesses[i] ?? 0) : Infinity }))
+      .sort((a, b) => b.f - a.f);
+    let aliveCount = 0;
+    nextOrganisms = sorted.map(({ o }) => {
+      if (!o.alive) return o;
+      aliveCount++;
+      return aliveCount <= config.carryingCapacity ? o : { ...o, alive: false };
+    });
+  }
+
+  // Remove dead organisms that have been dead (keep list tidy)
+  nextOrganisms = nextOrganisms.filter((o) => o.alive || o.age < 5);
+
+  // ── Rebuild grid ──────────────────────────────────────────────────────────
+  const newGrid: Cell[][] = Array.from({ length: config.height }, () =>
+    Array(config.width).fill(null)
+  );
+  for (const org of nextOrganisms) {
     if (org.alive) {
       const [x, y] = org.position;
       newGrid[y][x] = org.id;
     }
   }
 
+  // Check if a full generation has elapsed (all original organisms replaced)
+  const aliveIds = new Set(world.organisms.map((o) => o.id));
+  const anyOriginalAlive = nextOrganisms.some((o) => o.alive && aliveIds.has(o.id));
+  const generation = anyOriginalAlive ? world.generation : world.generation + 1;
+
   return {
     ...world,
     grid: newGrid,
-    organisms,
+    organisms: nextOrganisms,
+    generation,
     tick: world.tick + 1,
+    rngState: Math.floor(rng() * 2 ** 32),
   };
 }
+
 
 /** Validates a SimConfig and throws if invariants are violated */
 export function validateConfig(config: Partial<SimConfig>): void {
@@ -105,7 +213,8 @@ export const defaultConfig: SimConfig = {
     length: 8,
     genes: Array(8).fill({ type: "number", min: 0, max: 1 }),
   },
-  energyPerTick: 1,
-  reproductionThreshold: 150,
+  energyPerTick: 2,
+  energyGainPerTick: 3,         // net +1 energy/tick; builds toward reproductionThreshold
+  reproductionThreshold: 120,   // reachable from starting energy of 100 after ~20 ticks
   seed: 42,
 };
