@@ -7,7 +7,9 @@ import { AgentPanels } from "./AgentPanels";
 import { useStatsHistory } from "./useStatsHistory";
 import { createWorld, tick, createConfig, defaultConfig } from "../core/World";
 import { survivalFitness } from "../core/Fitness";
-import type { FitnessFunction, Organism, SimConfig, WorldState } from "../core/types";
+import type { FitnessFunction, MoveFn, Organism, SimConfig, WorldState } from "../core/types";
+import type { Preset } from "../presets/index";
+import { PRESETS } from "../presets/index";
 
 export default function App() {
   const [world, setWorld] = useState<WorldState>(() => createWorld(defaultConfig));
@@ -15,27 +17,51 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [speed, setSpeed] = useState(100);
   const [fitnessFn, setFitnessFn] = useState<FitnessFunction>(() => survivalFitness);
+  const [presetId, setPresetId] = useState("default");
   const rafRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fitnessFnRef = useRef<FitnessFunction>(survivalFitness);
+  const moveFnRef = useRef<MoveFn | undefined>(undefined);
+  const tickFnRef = useRef<Preset["tickFn"]>(undefined);
   const { history, reset: resetHistory } = useStatsHistory(world);
 
   useEffect(() => { fitnessFnRef.current = fitnessFn; }, [fitnessFn]);
 
-  const step = useCallback(() => {
-    setWorld((w) => { try { return tick(w, fitnessFnRef.current); } catch { return w; } });
+  function handlePresetChange(id: string) {
+    const preset = PRESETS.find((p) => p.id === id);
+    if (!preset) return;
+    setRunning(false);
+    setPresetId(id);
+    setFitnessFn(() => preset.fitnessFn);
+    fitnessFnRef.current = preset.fitnessFn;
+    moveFnRef.current = preset.moveFn;
+    setWorld(createWorld(preset.config));
+    resetHistory();
+    setSelected(null);
+  }
+
+  const doTick = useCallback((w: WorldState) => {
+    try {
+      return tickFnRef.current
+        ? tickFnRef.current(w)
+        : tick(w, fitnessFnRef.current, moveFnRef.current);
+    } catch { return w; }
   }, []);
+
+  const step = useCallback(() => {
+    setWorld((w) => doTick(w));
+  }, [doTick]);
 
   useEffect(() => {
     if (!running) { if (rafRef.current) clearTimeout(rafRef.current); return; }
     const schedule = () => {
       rafRef.current = setTimeout(() => {
-        setWorld((w) => { try { return tick(w, fitnessFnRef.current); } catch { return w; } });
+        setWorld((w) => doTick(w));
         schedule();
       }, speed);
     };
     schedule();
     return () => { if (rafRef.current) clearTimeout(rafRef.current); };
-  }, [running, speed]);
+  }, [running, speed, doTick]);
 
   useEffect(() => {
     if (!selected) return;
@@ -44,10 +70,15 @@ export default function App() {
   }, [world, selected]);
 
   function handleReset() {
+    const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
     setRunning(false);
-    setWorld(createWorld(defaultConfig));
-    setFitnessFn(() => survivalFitness);
+    setFitnessFn(() => preset.fitnessFn);
+    fitnessFnRef.current = preset.fitnessFn;
+    moveFnRef.current = preset.moveFn;
+    tickFnRef.current = preset.tickFn;
+    setWorld(createWorld(preset.config));
     resetHistory();
+    setSelected(null);
   }
 
   function handleConfigChange(patch: Partial<SimConfig>) {
@@ -80,6 +111,21 @@ export default function App() {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         {/* Left sidebar — controls */}
         <aside style={{ width: 220, borderRight: "1px solid #2a2a2a", padding: 12, background: "#111", display: "flex", flexDirection: "column", gap: 0 }}>
+          <div style={{ marginBottom: 12 }}>
+            <p style={{ margin: "0 0 4px", fontSize: "0.7rem", color: "#555", textTransform: "uppercase", letterSpacing: "0.05em" }}>Preset</p>
+            <select
+              value={presetId}
+              onChange={(e) => handlePresetChange(e.target.value)}
+              style={{ width: "100%", background: "#1e1e1e", color: "#eee", border: "1px solid #333", borderRadius: 4, padding: "4px 6px", fontSize: "0.8rem" }}
+            >
+              {PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <p style={{ margin: "4px 0 0", fontSize: "0.65rem", color: "#555" }}>
+              {PRESETS.find((p) => p.id === presetId)?.description}
+            </p>
+          </div>
           <ControlPanel
             world={world}
             running={running}
