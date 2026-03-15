@@ -5,7 +5,7 @@ import type { FitnessFunction, SimConfig } from "../core/types";
  * Classic Conway's Game of Life encoded as genome-driven behaviour.
  * Each organism's genome encodes its neighbourhood survival rules.
  */
-export const gameOfLifeFitness: FitnessFunction = (organism, world) => {
+export const gameOfLifeFitness: FitnessFunction = (organism, _world) => {
   // TODO: count living neighbours and reward stable patterns
   return organism.alive ? organism.age : 0;
 };

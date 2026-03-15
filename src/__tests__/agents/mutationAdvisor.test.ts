@@ -1,4 +1,4 @@
-import type { AdvisorAdvice, PopulationStats } from "../../agents/mutationAdvisor";
+import type { AdvisorAdvice } from "../../agents/mutationAdvisor";
 
 // Contract test: validates the shape of AdvisorAdvice without hitting the API
 describe("MutationAdvisor contract", () => {
