@@ -100,9 +100,17 @@ export function tick(
   ) {
     const eligible = alive.filter((o) => o.energy >= config.reproductionThreshold);
     if (eligible.length >= 2) {
+      const selWorld = { ...world, organisms };
       const parents = select(
         eligible,
-        eligible.map((o) => fitnessfn(o, { ...world, organisms })),
+        eligible.map((o) => {
+          try {
+            const s = fitnessfn(o, selWorld);
+            return Number.isFinite(s) ? Math.max(0, s) : 0;
+          } catch {
+            return survivalFitness(o, selWorld);
+          }
+        }),
         config.selectionType,
         2,
         config.tournamentSize,

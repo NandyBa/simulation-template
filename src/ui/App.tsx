@@ -22,14 +22,14 @@ export default function App() {
   useEffect(() => { fitnessFnRef.current = fitnessFn; }, [fitnessFn]);
 
   const step = useCallback(() => {
-    setWorld((w) => tick(w, fitnessFnRef.current));
+    setWorld((w) => { try { return tick(w, fitnessFnRef.current); } catch { return w; } });
   }, []);
 
   useEffect(() => {
     if (!running) { if (rafRef.current) clearTimeout(rafRef.current); return; }
     const schedule = () => {
       rafRef.current = setTimeout(() => {
-        setWorld((w) => tick(w, fitnessFnRef.current));
+        setWorld((w) => { try { return tick(w, fitnessFnRef.current); } catch { return w; } });
         schedule();
       }, speed);
     };
