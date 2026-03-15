@@ -1,5 +1,13 @@
 # GenSim — Claude Code Guidelines
 
+## Branching Policy
+
+Never commit directly to `main`. Always work on a feature branch or worktree.
+
+- Create a branch per phase: `feat/phase-1-core`, `feat/phase-2-presets`, etc.
+- Merge to `main` only via PR.
+- When using agents, prefer `isolation: "worktree"` to keep changes isolated.
+
 ## Commit Workflow Policy
 
 After completing each phase or discrete task, **always propose and create a commit** before moving on to the next phase.
