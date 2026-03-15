@@ -26,6 +26,7 @@ export const gameOfLifeConfig: SimConfig = createConfig({
     genes: Array(9).fill({ type: "boolean" }),
   },
   energyPerTick: 0,
+  energyGainPerTick: 0,
   reproductionThreshold: 3,
   seed: 42,
 });

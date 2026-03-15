@@ -46,9 +46,9 @@ export function tick(
   const rng = createRNG(world.rngState);
   const { config } = world;
 
-  // ── Phase 1: Age + energy drain ──────────────────────────────────────────
+  // ── Phase 1: Age + energy drain + passive regen ──────────────────────────
   let organisms: Organism[] = world.organisms.map((org) => {
-    const energy = org.energy - config.energyPerTick;
+    const energy = org.energy + config.energyGainPerTick - config.energyPerTick;
     return { ...org, age: org.age + 1, energy, alive: energy > 0 };
   });
 
@@ -88,7 +88,7 @@ export function tick(
 
   if (
     alive.length >= 2 &&
-    organisms.length < config.carryingCapacity
+    alive.length < config.carryingCapacity
   ) {
     const eligible = alive.filter((o) => o.energy >= config.reproductionThreshold);
     if (eligible.length >= 2) {
@@ -213,7 +213,8 @@ export const defaultConfig: SimConfig = {
     length: 8,
     genes: Array(8).fill({ type: "number", min: 0, max: 1 }),
   },
-  energyPerTick: 1,
-  reproductionThreshold: 150,
+  energyPerTick: 2,
+  energyGainPerTick: 3,         // net +1 energy/tick; builds toward reproductionThreshold
+  reproductionThreshold: 120,   // reachable from starting energy of 100 after ~20 ticks
   seed: 42,
 };

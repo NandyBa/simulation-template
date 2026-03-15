@@ -34,6 +34,7 @@ export const pathfinderConfig: SimConfig = createConfig({
     }),
   },
   energyPerTick: 1,
+  energyGainPerTick: 2,
   reproductionThreshold: 120,
   seed: 13,
 });

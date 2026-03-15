@@ -40,6 +40,7 @@ export const ecosystemConfig: SimConfig = createConfig({
     ],
   },
   energyPerTick: 2,
-  reproductionThreshold: 200,
+  energyGainPerTick: 4,
+  reproductionThreshold: 150,
   seed: 7,
 });
