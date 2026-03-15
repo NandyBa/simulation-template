@@ -12,6 +12,19 @@ The world has: grid, organisms, generation, tick, config.
 Do not use any external APIs, eval, or side effects.`;
 
 /**
+ * Strips markdown code fences and function signatures that local models
+ * sometimes include despite being told not to.
+ */
+function extractFunctionBody(raw: string): string {
+  // Remove ```javascript ... ``` or ``` ... ``` fences
+  let body = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+  // Remove leading function signature like "function foo(organism, world) {"
+  // and its matching closing brace
+  body = body.replace(/^function\s+\w+\s*\([^)]*\)\s*\{/, "").replace(/\}$/, "").trim();
+  return body;
+}
+
+/**
  * Translates a plain-English fitness goal into a sandboxed FitnessFunction.
  */
 export async function fitnessDesignerAgent(
@@ -20,6 +33,6 @@ export async function fitnessDesignerAgent(
   return callSubAgent(
     SYSTEM_PROMPT,
     goal,
-    (raw) => sandboxFitnessFunction(raw.trim())
+    (raw) => sandboxFitnessFunction(extractFunctionBody(raw))
   );
 }

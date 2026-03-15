@@ -1,42 +1,44 @@
 /**
  * Shared utility for all sub-agent calls.
- * Uses fetch directly (Anthropic SDK is not browser-compatible).
- * Requires VITE_ANTHROPIC_API_KEY in environment.
+ * Uses the Ollama native API — no API key required.
+ *
+ * Configure via .env.local:
+ *   VITE_OLLAMA_URL=http://localhost:11434   (default)
+ *   VITE_OLLAMA_MODEL=llama3.2              (default)
  */
+
+interface OllamaResponse {
+  message: { role: string; content: string };
+}
+
 export async function callSubAgent<T>(
   systemPrompt: string,
   userMessage: string,
   parseResponse: (raw: string) => T
 ): Promise<T> {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined;
-  if (!apiKey) throw new Error("VITE_ANTHROPIC_API_KEY is not set");
+  const base = (import.meta.env.VITE_OLLAMA_URL as string | undefined) ?? "http://localhost:11434";
+  const model = (import.meta.env.VITE_OLLAMA_MODEL as string | undefined) ?? "llama3.2";
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch(`${base}/api/chat`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
+      model,
+      stream: false,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
     }),
   });
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Anthropic API error ${res.status}: ${err}`);
+    throw new Error(`Ollama error ${res.status}: ${err}`);
   }
 
-  const data = await res.json() as { content: { type: string; text: string }[] };
-  const text = data.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
+  const data = await res.json() as OllamaResponse;
+  const text = data.message.content;
 
   return parseResponse(text);
 }
