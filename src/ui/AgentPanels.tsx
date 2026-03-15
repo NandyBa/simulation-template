@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { fitnessDesignerAgent } from "../agents/fitnessDesigner";
+import type { FitnessDesignerResult } from "../agents/fitnessDesigner";
 import { mutationAdvisorAgent } from "../agents/mutationAdvisor";
 import type { PopulationStats, AdvisorAdvice } from "../agents/mutationAdvisor";
 import { narratorAgent } from "../agents/narrator";
@@ -42,6 +43,7 @@ export function AgentPanels({ world, onFitnessChange, onConfigChange }: Props) {
   const [fitnessGoal, setFitnessGoal] = useState("");
   const [fitnessStatus, setFitnessStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [fitnessError, setFitnessError] = useState<string | null>(null);
+  const [fitnessBody, setFitnessBody] = useState<string | null>(null);
 
   const [advisorStatus, setAdvisorStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [advice, setAdvice] = useState<AdvisorAdvice | null>(null);
@@ -56,8 +58,9 @@ export function AgentPanels({ world, onFitnessChange, onConfigChange }: Props) {
     setFitnessStatus("loading");
     setFitnessError(null);
     try {
-      const fn = await fitnessDesignerAgent(fitnessGoal);
-      onFitnessChange(fn);
+      const result: FitnessDesignerResult = await fitnessDesignerAgent(fitnessGoal);
+      onFitnessChange(result.fn);
+      setFitnessBody(result.body);
       setFitnessStatus("ok");
     } catch (e) {
       setFitnessStatus("error");
@@ -112,11 +115,18 @@ export function AgentPanels({ world, onFitnessChange, onConfigChange }: Props) {
         <button onClick={handleDesignFitness} disabled={anyLoading || !fitnessGoal.trim()} style={{ marginTop: 4, fontSize: "0.75rem" }}>
           {fitnessStatus === "loading" ? "Generating…" : "Generate"}
         </button>
-        {fitnessStatus === "ok" && <p style={{ fontSize: "0.7rem", color: "#4ade80", margin: "4px 0 0" }}>✓ Fitness applied</p>}
+        {fitnessStatus === "ok" && (
+          <div style={{ marginTop: 6 }}>
+            <p style={{ fontSize: "0.7rem", color: "#4ade80", margin: "0 0 4px" }}>✓ Active fitness function:</p>
+            <pre style={{ fontSize: "0.65rem", background: "#1a1a1a", border: "1px solid #333", borderRadius: 4, padding: "6px 8px", margin: 0, overflowX: "auto", color: "#c084fc", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              {fitnessBody}
+            </pre>
+          </div>
+        )}
         {fitnessError && <p style={{ fontSize: "0.7rem", color: "#f87171", margin: "4px 0 0" }}>{fitnessError}</p>}
         <button
-          onClick={() => { onFitnessChange(survivalFitness); setFitnessStatus("idle"); setFitnessGoal(""); }}
-          style={{ fontSize: "0.7rem", marginTop: 4, opacity: 0.6 }}
+          onClick={() => { onFitnessChange(survivalFitness); setFitnessStatus("idle"); setFitnessGoal(""); setFitnessBody(null); }}
+          style={{ fontSize: "0.7rem", marginTop: 6, opacity: 0.6 }}
         >
           Reset to default
         </button>
